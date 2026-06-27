@@ -1,11 +1,20 @@
+import os
 import regex as re
 from collections import Counter
 import hazm as hz
 from huggingface_hub import hf_hub_download
 
-model_path = hf_hub_download(repo_id="roshan-research/hazm-postagger", filename="pos_tagger.model")
+os.environ['HF_HUB_DISABLE_PROGRESS_BARS'] = '1'
+os.environ['TRANSFORMERS_VERBOSITY'] = 'error'
+
+model_path = hf_hub_download(
+    repo_id="roshan-research/hazm-postagger",
+    filename="pos_tagger.model",
+    cache_dir="./hf_cache"
+)
 
 normalizer = hz.Normalizer()
+informal_normalizer = hz.InformalNormalizer()
 tokenizer = hz.WordTokenizer()
 tagger = hz.POSTagger(model=model_path)
 
@@ -53,12 +62,13 @@ def is_sen(tweet: list[str], valid_hashtags: set[str]):
     tweet = clean_hashtag_by_freq(tweet, valid_hashtags)
     tweet = clean_number(tweet)
     tweet = clean_repeated_emojis(tweet)
+    tweet = normalization(tweet)
 
     tokens = tokenizer.tokenize(tweet)
     tags = tagger.tag(tokens)
 
     has_verb = (
-        any(tag == 'V' for word, tag in tags) and len(tokens) >= 3
+        any(tag == 'VERB' for word, tag in tags) and len(tokens) >= 3
     ) or (
         len(tokens) >= 1 and has_emoji(tweet)
     )
@@ -100,5 +110,7 @@ def clean_repeated_emojis(tweet: str) -> str:
     return tweet
 
 
-def normalize(tweet: str) -> str:
-    return normalizer.normalize(tweet)
+def normalization(tweet: str) -> str:
+    tweet = informal_normalizer.normalize(tweet)
+    tweet = normalizer.normalize(tweet)
+    return tweet
