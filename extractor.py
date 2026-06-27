@@ -7,6 +7,7 @@ NUMBERS_PATTERN = re.compile(r'(?:,\d+)+\s*$')
 
 def parse_csv(path: str):
     with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+        f.readline()
         for line in f:
             line = line.strip()
             if not line:
