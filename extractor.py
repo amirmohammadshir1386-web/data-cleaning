@@ -1,4 +1,3 @@
-import cleaner
 import regex as re
 def parse_csv(path: str):
     with open(path, 'r', encoding='utf-8', errors='ignore') as csv:
