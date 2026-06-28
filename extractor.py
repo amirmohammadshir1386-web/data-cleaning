@@ -1,7 +1,5 @@
 import regex as re
-from cleaner import count_hashtags
 
-# یه بار کامپایل میشه
 DATE_PATTERN    = re.compile(r'"?\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}"?,?')
 NUMBERS_PATTERN = re.compile(r'(?:,\d+)+\s*$')
 
@@ -23,5 +21,4 @@ def parse_csv(path: str):
 def runer(data_path = input("لطفا نام دیتا خام را وارد کنید:\n")):
     with open('extracted.csv', 'w', encoding='utf-8', errors='ignore') as out:
         for row in parse_csv(data_path):
-            count_hashtags(row)
             out.write(row + '\n')
