@@ -37,7 +37,7 @@ HTTP_PATTERN          = re.compile(r'https?://[^ ]+')
 WWW_PATTERN           = re.compile(r'www\.[^ ]+')
 NON_PERSIAN_PATTERN   = re.compile(r'[^\u0600-\u06FF\s]')
 REPEATED_CHAR_PATTERN = re.compile(r'([^\p{L}\p{N}\s])\1+')
-REPEATED_PERSIAN_PATTERN = re.compile(r'\b(?!(شش|کک)\b)(\w*?)([ا-ی])\3{1,}(\w*?)\b')
+REPEATED_PERSIAN_PATTERN = re.compile(r'([ا-ی])\1+')
 WHITESPACE_PATTERN    = re.compile(r'\s+')
 NOISE_NUMBER_PATTERN  = re.compile(r'\b[\d۰-۹]{7,}\b')
 NUMBER_PATTERN        = re.compile(r'[\d۰-۹]+')
@@ -63,10 +63,8 @@ VALUABLE_AFTER = frozenset({
 
 
 # ──────────────────────────────────────────────
-# توابع
+# توابع پاکسازی کمکی
 # ──────────────────────────────────────────────
-def has_emoji(text: str) -> bool:
-    return bool(EMOJI_PATTERN.search(text))
 
 
 def count_hashtags(tweets_iterator) -> set[str]:
@@ -89,27 +87,6 @@ def clean_hashtag_by_freq(tweet: str, valid_hashtags: set[str]) -> str:
             word_inside = tag[1:].replace('_', ' ')  # حذف # با slice
             tweet = tweet.replace(tag, word_inside)
     return tweet
-
-#, valid_hashtags: set[str]
-def is_sen(tweet: list[str]) -> tuple[bool, str]:
-    tweet = ''.join(tweet)
-    tweet = clean_url(tweet)
-    #tweet = clean_hashtag_by_freq(tweet, valid_hashtags)
-    tweet = clean_number(tweet)
-    tweet = clean_repeated_emojis(tweet)
-    tweet = normalizer.normalize(tweet)
-    tweet = clean_repeated_persian(tweet)
-
-    tokens = tokenizer.tokenize(tweet)
-    tags   = tagger.tag(tokens)
-
-    has_verb = (
-        any(tag == 'VERB' for _, tag in tags) and len(tokens) >= 3
-    ) or (
-        len(tokens) >= 1 and has_emoji(tweet)
-    )
-
-    return has_verb, tweet
 
 
 def clean_url(tweet: str) -> str:
@@ -145,10 +122,35 @@ def clean_all_without_persian(tweet: str) -> str:
 
 
 def clean_repeated_emojis(tweet: str) -> str:
-    return REPEATED_CHAR_PATTERN.sub(r'\1', tweet)
+    return REPEATED_CHAR_PATTERN.sub('', tweet)
+
 
 def clean_repeated_persian(tweet: str) -> str:
-    return REPEATED_PERSIAN_PATTERN.sub(
-        lambda m: m.group(2) + m.group(3) + m.group(4),
-        tweet
-    )
+    PERSIAN_DOUBLE_EXCEPTIONS = frozenset({'شش', 'کک'})
+    def replacer(m: re.Match) -> str:
+        seq = m.group()
+        if seq in PERSIAN_DOUBLE_EXCEPTIONS:
+            return seq
+        return m.group(1)
+    return REPEATED_PERSIAN_PATTERN.sub(replacer, tweet)
+
+
+# ──────────────────────────────────────────────
+# تابع اصلی
+# ──────────────────────────────────────────────
+
+def is_sen(tweet: list[str], valid_hashtags: set[str]) -> tuple[bool, str]:
+    tweet = ''.join(tweet)
+    tweet = clean_url(tweet)
+    tweet = clean_hashtag_by_freq(tweet, valid_hashtags)
+    tweet = clean_number(tweet)
+    tweet = clean_repeated_emojis(tweet)
+    tweet = normalizer.normalize(tweet)
+    tweet = clean_repeated_persian(tweet)
+
+    tokens = tokenizer.tokenize(tweet)
+    tags   = tagger.tag(tokens)
+
+    has_verb = (any(tag == 'VERB' for _, tag in tags) and len(tokens) >= 3)
+
+    return has_verb, tweet
