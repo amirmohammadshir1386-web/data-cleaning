@@ -7,7 +7,6 @@ NUMBERS_PATTERN = re.compile(r'(?:,\d+)+\s*$')
 
 def parse_csv(path: str):
     with open(path, 'r', encoding='utf-8', errors='ignore') as f:
-        f.readline()
         for line in f:
             line = line.strip()
             if not line:
@@ -22,5 +21,5 @@ def parse_csv(path: str):
 
 
 with open('extracted.csv', 'w', encoding='utf-8', errors='ignore') as out:
-    for row in parse_csv('tweets.csv'):
+    for row in parse_csv('twitter_sample_tweets.csv'):
         out.write(row + '\n')

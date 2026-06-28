@@ -22,7 +22,7 @@ model_path = hf_hub_download(
 # ──────────────────────────────────────────────
 # Hazm instances (یه بار ساخته میشن)
 # ──────────────────────────────────────────────
-normalizer         = hz.Normalizer()
+normalizer         = hz.Normalizer(decrease_repeated_chars=False)
 informal_normalizer = hz.InformalNormalizer()
 tokenizer          = hz.WordTokenizer()
 tagger             = hz.POSTagger(model=model_path)
@@ -36,6 +36,7 @@ HTTP_PATTERN          = re.compile(r'https?://[^ ]+')
 WWW_PATTERN           = re.compile(r'www\.[^ ]+')
 NON_PERSIAN_PATTERN   = re.compile(r'[^\u0600-\u06FF\s]')
 REPEATED_CHAR_PATTERN = re.compile(r'([^\p{L}\p{N}\s])\1+')
+REPEATED_PERSIAN_PATTERN = re.compile(r'\b(?!(شش|کک)\b)(\w*?)([ا-ی])\3{1,}(\w*?)\b')
 WHITESPACE_PATTERN    = re.compile(r'\s+')
 NOISE_NUMBER_PATTERN  = re.compile(r'\b[\d۰-۹]{7,}\b')
 NUMBER_PATTERN        = re.compile(r'[\d۰-۹]+')
@@ -88,14 +89,15 @@ def clean_hashtag_by_freq(tweet: str, valid_hashtags: set[str]) -> str:
             tweet = tweet.replace(tag, word_inside)
     return tweet
 
-
-def is_sen(tweet: list[str], valid_hashtags: set[str]) -> tuple[bool, str]:
+#, valid_hashtags: set[str]
+def is_sen(tweet: list[str]) -> tuple[bool, str]:
     tweet = ''.join(tweet)
     tweet = clean_url(tweet)
-    tweet = clean_hashtag_by_freq(tweet, valid_hashtags)
+    #tweet = clean_hashtag_by_freq(tweet, valid_hashtags)
     tweet = clean_number(tweet)
     tweet = clean_repeated_emojis(tweet)
-    tweet = normalization(tweet)
+    tweet = normalizer.normalize(tweet)
+    tweet = clean_repeated_persian(tweet)
 
     tokens = tokenizer.tokenize(tweet)
     tags   = tagger.tag(tokens)
@@ -144,9 +146,8 @@ def clean_all_without_persian(tweet: str) -> str:
 def clean_repeated_emojis(tweet: str) -> str:
     return REPEATED_CHAR_PATTERN.sub(r'\1', tweet)
 
-
-def normalization(tweet: str) -> str:
-    # InformalNormalizer خروجیش list[list[str]] هست
-    result = informal_normalizer.normalize(tweet)
-    tweet  = ' '.join(' '.join(sentence) for sentence in result)
-    return normalizer.normalize(tweet)
+def clean_repeated_persian(tweet: str) -> str:
+    return REPEATED_PERSIAN_PATTERN.sub(
+        lambda m: m.group(2) + m.group(3) + m.group(4),
+        tweet
+    )
