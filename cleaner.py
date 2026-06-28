@@ -36,8 +36,13 @@ MENTION_PATTERN       = re.compile(r'@[A-Za-z0-9_]+')
 HTTP_PATTERN          = re.compile(r'https?://[^ ]+')
 WWW_PATTERN           = re.compile(r'www\.[^ ]+')
 NON_PERSIAN_PATTERN   = re.compile(r'[^\u0600-\u06FF\s]')
-REPEATED_CHAR_PATTERN = re.compile(r'([^\p{L}\p{N}\s])\1+')
+REPEATED_CHAR_PATTERN    = re.compile(r'([^\p{L}\p{N}\s])\1+')
 REPEATED_PERSIAN_PATTERN = re.compile(r'([ا-ی])\1+')
+
+# ──────────────────────────────────────────────
+# استثناهای تکرار فارسی (module-level)
+# ──────────────────────────────────────────────
+PERSIAN_DOUBLE_EXCEPTIONS = frozenset({'شش', 'کک'})
 WHITESPACE_PATTERN    = re.compile(r'\s+')
 NOISE_NUMBER_PATTERN  = re.compile(r'\b[\d۰-۹]{7,}\b')
 NUMBER_PATTERN        = re.compile(r'[\d۰-۹]+')
@@ -80,13 +85,10 @@ def count_hashtags(tweets_iterator) -> set[str]:
 
 
 def clean_hashtag_by_freq(tweet: str, valid_hashtags: set[str]) -> str:
-    for tag in HASHTAG_PATTERN.findall(tweet):
-        if tag not in valid_hashtags:
-            tweet = tweet.replace(tag, '')
-        else:
-            word_inside = tag[1:].replace('_', ' ')  # حذف # با slice
-            tweet = tweet.replace(tag, word_inside)
-    return tweet
+    def replacer(m: re.Match) -> str:
+        tag = m.group()
+        return tag[1:].replace('_', ' ') if tag in valid_hashtags else ''
+    return HASHTAG_PATTERN.sub(replacer, tweet)
 
 
 def clean_url(tweet: str) -> str:
@@ -101,12 +103,13 @@ def clean_hashtag(tweet: str) -> str:
 
 
 def clean_number(tweet: str) -> str:
-    tweet = NOISE_NUMBER_PATTERN.sub('', tweet)
+    tweet  = NOISE_NUMBER_PATTERN.sub('', tweet)
+    _tweet = tweet  # snapshot برای closure
 
     def replacer(match: re.Match) -> str:
         start, end = match.span()
-        prev_match = PREV_WORD_PATTERN.search(tweet[:start])
-        next_match = NEXT_WORD_PATTERN.match(tweet[end:])
+        prev_match = PREV_WORD_PATTERN.search(_tweet[:start])
+        next_match = NEXT_WORD_PATTERN.match(_tweet[end:])
 
         if (prev_match and prev_match.group(1) in VALUABLE_BEFORE) or \
            (next_match and next_match.group(1) in VALUABLE_AFTER):
@@ -121,12 +124,11 @@ def clean_all_without_persian(tweet: str) -> str:
     return NON_PERSIAN_PATTERN.sub('', tweet)
 
 
-def clean_repeated_emojis(tweet: str) -> str:
-    return REPEATED_CHAR_PATTERN.sub('', tweet)
+def clean_emojis(tweet: str) -> str:
+    return EMOJI_PATTERN.sub('', tweet)
 
 
 def clean_repeated_persian(tweet: str) -> str:
-    PERSIAN_DOUBLE_EXCEPTIONS = frozenset({'شش', 'کک'})
     def replacer(m: re.Match) -> str:
         seq = m.group()
         if seq in PERSIAN_DOUBLE_EXCEPTIONS:
@@ -144,7 +146,7 @@ def is_sen(tweet: list[str], valid_hashtags: set[str]) -> tuple[bool, str]:
     tweet = clean_url(tweet)
     tweet = clean_hashtag_by_freq(tweet, valid_hashtags)
     tweet = clean_number(tweet)
-    tweet = clean_repeated_emojis(tweet)
+    tweet = clean_emojis(tweet)
     tweet = normalizer.normalize(tweet)
     tweet = clean_repeated_persian(tweet)
 

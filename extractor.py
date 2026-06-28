@@ -17,7 +17,11 @@ def parse_csv(path: str):
 
             if line:
                 yield line
-def runer(data_path = input("لطفا نام دیتا خام را وارد کنید:\n")):
+
+
+def runer(data_path: str | None = None) -> None:
+    if data_path is None:
+        data_path = input("لطفا نام دیتا خام را وارد کنید:\n")
     print("در حال استخراج داده های خام")
     with open('output files/extracted.csv', 'w', encoding='utf-8', errors='ignore') as out:
         for row in parse_csv(data_path):

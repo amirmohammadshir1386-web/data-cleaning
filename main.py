@@ -1,40 +1,57 @@
 import pandas as pd
+from multiprocessing import Pool
+from functools import partial
 import extractor as ex
 import cleaner as cl
 
-ex.runer()
-print("استخراج اولیه پایان یافت.")
-'''
-for chunk in pd.read_csv('output files/extracted.csv', chunksize=10000):
-    chunk = pd.DataFrame(chunk)
-    chunk = chunk.iloc[:, [0]]
-    chunk.columns = ['text']
-    chunk = chunk.dropna(subset=['text'])
-    chunk = chunk.drop_duplicates(subset=['text'])
-    for row in chunk['text']:
+# ── مسیرها ───────────────────────────────────────────────────────────────────
+EXTRACTED_PATH = 'output files/extracted.csv'
+UNIQUE_PATH    = 'output files/unique.csv'
+FINAL_PATH     = 'output files/final.csv'
 
-        # بار اول
-        chunk.to_csv('clean.csv', index=False, mode='w', header=True)
 
-        # بقیه chunk ها
-        chunk.to_csv('clean.csv', index=False, mode='a', header=False)
-'''
-def remove_duplicates_with_pandas(secondary_path, final_path):
-    print("\n⏳ فاز ۲: در حال بارگذاری فایل ثانویه در پانداز برای حذف تکراری‌ها...")
-
-    # حالا پانداز یک فایل بسیار سبکِ تک‌ستونه را بدون هیچ اروری می‌خواند
-    df = pd.read_csv(secondary_path, names=['text'], header=None)
-
-    # حذف توییت‌های دابلیکیت
-    print("🧹 در حال پردازش و حذف دابلیکیت‌ها...")
+def remove_duplicates(input_path: str, output_path: str) -> None:
+    print("⏳ فاز ۲: حذف تکراری‌ها...")
+    df        = pd.read_csv(input_path, names=['text'], header=None)
     df_unique = df.drop_duplicates(subset=['text'])
+    print(f"   کل: {len(df):,}  |  یکتا: {len(df_unique):,}")
+    df_unique.to_csv(output_path, index=False, header=False, encoding='utf-8')
 
-    print(f"📊 آمار نهایی:")
-    print(f"🔹 کل توییت‌های استخراج شده: {len(df)}")
-    print(f"🔸 توییت‌های یکتا و غیرتکراری: {len(df_unique)}")
 
-    # ذخیره فایل نهایی کاملاً تمیز برای ادامه پروژه (هاضم و فرآیندهای بعدی)
-    df_unique.to_csv(final_path, index=False, header=['text'], encoding='utf-8')
-    print(f"🎉 فایل نهایی و یکتا در '{final_path}' ذخیره شد.")
-remove_duplicates_with_pandas('output files/extracted.csv', 'output files/clean.csv')
-df = pd.read_csv('output files/clean.csv', names=['text'], header=None)
+def iter_lines(path: str):
+    """سطر به سطر می‌خونه — کل فایل رو توی رم نمی‌ریزه."""
+    with open(path, encoding='utf-8', errors='ignore') as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                yield line
+
+
+if __name__ == '__main__':
+
+    # ── فاز ۱: استخراج ───────────────────────────────────────────────────────
+    ex.runer()
+    print("✅ فاز ۱: استخراج پایان یافت.")
+
+    # ── فاز ۲: حذف تکراری‌ها ─────────────────────────────────────────────────
+    remove_duplicates(EXTRACTED_PATH, UNIQUE_PATH)
+    print("✅ فاز ۲: حذف تکراری‌ها پایان یافت.")
+
+    # ── فاز ۳: شمارش هشتگ‌ها — پاس اول روی فایل ─────────────────────────────
+    print("⏳ فاز ۳: شمارش هشتگ‌ها...")
+    valid_hashtags = cl.count_hashtags(iter_lines(UNIQUE_PATH))
+    print(f"✅ فاز ۳: {len(valid_hashtags):,} هشتگ معتبر پیدا شد.")
+
+    # ── فاز ۴: پاکسازی موازی — پاس دوم روی فایل ─────────────────────────────
+    print("⏳ فاز ۴: پاکسازی توییت‌ها...")
+    worker = partial(cl.is_sen, valid_hashtags=valid_hashtags)
+    count  = 0
+
+    with open(FINAL_PATH, 'w', encoding='utf-8') as out:
+        with Pool() as pool:
+            for ok, clean in pool.imap(worker, iter_lines(UNIQUE_PATH), chunksize=200):
+                if ok:
+                    out.write(clean + '\n')
+                    count += 1
+
+    print(f"✅ فاز ۴: {count:,} توییت معتبر → {FINAL_PATH}")
