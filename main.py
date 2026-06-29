@@ -3,12 +3,18 @@ from multiprocessing import Pool
 from functools import partial
 import extractor as ex
 import cleaner as cl
+from hazm import SentenceTokenizer
 
+sentence_tokenizer  = SentenceTokenizer()
 # ── مسیرها ───────────────────────────────────────────────────────────────────
 EXTRACTED_PATH = 'output files/extracted.csv'
 UNIQUE_PATH    = 'output files/unique.csv'
 FINAL_PATH     = 'output files/final.csv'
 
+def x(tweet:list[str]):
+    tweet = ''.join(tweet)
+    for sent in sentence_tokenizer.tokenize(tweet):
+        yield sent
 
 def remove_duplicates(input_path: str, output_path: str) -> None:
     print("⏳ فاز ۲: حذف تکراری‌ها...")
@@ -49,9 +55,10 @@ if __name__ == '__main__':
 
     with open(FINAL_PATH, 'w', encoding='utf-8') as out:
         with Pool() as pool:
-            for ok, clean in pool.imap(worker, iter_lines(UNIQUE_PATH), chunksize=200):
+            for ok, clean in pool.imap(worker, x(iter_lines(UNIQUE_PATH)), chunksize=200):
                 if ok:
                     out.write(clean + '\n')
                     count += 1
 
     print(f"✅ فاز ۴: {count:,} توییت معتبر → {FINAL_PATH}")
+
