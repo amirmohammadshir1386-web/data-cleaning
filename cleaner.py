@@ -4,7 +4,6 @@ from collections import Counter
 import hazm as hz
 from huggingface_hub import hf_hub_download
 
-
 # ──────────────────────────────────────────────
 # Environment
 # ──────────────────────────────────────────────
@@ -21,33 +20,32 @@ model_path = hf_hub_download(
 )
 
 # ──────────────────────────────────────────────
-# Hazm instances (یه بار ساخته میشن)
+# Hazm instances
 # ──────────────────────────────────────────────
-normalizer          = hz.Normalizer(decrease_repeated_chars=False)
-informal_normalizer = hz.InformalNormalizer()
-word_tokenizer      = hz.WordTokenizer()
-tagger              = hz.POSTagger(model=model_path)
+normalizer = hz.Normalizer(decrease_repeated_chars=False)
+word_tokenizer = hz.WordTokenizer()
+tagger = hz.POSTagger(model=model_path)
 
 # ──────────────────────────────────────────────
-# Compiled patterns (یه بار کامپایل میشن)
+# Compiled patterns
 # ──────────────────────────────────────────────
-HASHTAG_PATTERN       = re.compile(r'#[\u0600-\u06FF\d_]+')
-MENTION_PATTERN       = re.compile(r'@[A-Za-z0-9_]+')
-HTTP_PATTERN          = re.compile(r'https?://[^ ]+')
-WWW_PATTERN           = re.compile(r'www\.[^ ]+')
-NON_PERSIAN_PATTERN   = re.compile(r'[^\u0600-\u06FF\s#_۰-۹\d]')
+HASHTAG_PATTERN = re.compile(r'#[\u0600-\u06FF\d_]+')
+MENTION_PATTERN = re.compile(r'@[A-Za-z0-9_]+')
+HTTP_PATTERN = re.compile(r'https?://[^ ]+')
+WWW_PATTERN = re.compile(r'www\.[^ ]+')
+NON_PERSIAN_PATTERN = re.compile(r'[^\u0600-\u06FF\s#_۰-۹\d]')
 REPEATED_PERSIAN_PATTERN = re.compile(r'([ا-ی])\1+')
 
 # ──────────────────────────────────────────────
-# استثناهای تکرار فارسی (module-level)
+# استثناهای تکرار فارسی
 # ──────────────────────────────────────────────
 PERSIAN_DOUBLE_EXCEPTIONS = frozenset({'شش', 'کک'})
-WHITESPACE_PATTERN    = re.compile(r'\s+')
-NOISE_NUMBER_PATTERN  = re.compile(r'\b[\d۰-۹]{7,}\b')
-NUMBER_PATTERN        = re.compile(r'[\d۰-۹]+')
-PREV_WORD_PATTERN     = re.compile(r'([\p{L}]+)\s*$')
-NEXT_WORD_PATTERN     = re.compile(r'\s*([\p{L}%٪]+)')
-EMOJI_PATTERN         = re.compile(r'\p{Emoji}')
+WHITESPACE_PATTERN = re.compile(r'\s+')
+NOISE_NUMBER_PATTERN = re.compile(r'\b[\d۰-۹]{7,}\b')
+NUMBER_PATTERN = re.compile(r'[\d۰-۹]+')
+PREV_WORD_PATTERN = re.compile(r'([\p{L}]+)\s*$')
+NEXT_WORD_PATTERN = re.compile(r'\s*([\p{L}%٪]+)')
+EMOJI_PATTERN = re.compile(r'\p{Emoji}')
 
 # ──────────────────────────────────────────────
 # اعداد معنادار
@@ -70,10 +68,8 @@ VALUABLE_AFTER = frozenset({
 # توابع پاکسازی کمکی
 # ──────────────────────────────────────────────
 
-
 def count_hashtags(tweets_iterator) -> set[str]:
     hashtag_counter = Counter()
-
     for tweet in tweets_iterator:
         hashtag_counter.update(HASHTAG_PATTERN.findall(tweet))
 
@@ -87,6 +83,7 @@ def clean_hashtag_by_freq(tweet: str, valid_hashtags: set[str]) -> str:
     def replacer(m: re.Match) -> str:
         tag = m.group()
         return tag[1:].replace('_', ' ') if tag in valid_hashtags else ''
+
     return HASHTAG_PATTERN.sub(replacer, tweet)
 
 
@@ -98,8 +95,8 @@ def clean_url(tweet: str) -> str:
 
 
 def clean_number(tweet: str) -> str:
-    tweet  = NOISE_NUMBER_PATTERN.sub('', tweet)
-    _tweet = tweet  # snapshot برای closure
+    tweet = NOISE_NUMBER_PATTERN.sub('', tweet)
+    _tweet = tweet
 
     def replacer(match: re.Match) -> str:
         start, end = match.span()
@@ -107,7 +104,7 @@ def clean_number(tweet: str) -> str:
         next_match = NEXT_WORD_PATTERN.match(_tweet[end:])
 
         if (prev_match and prev_match.group(1) in VALUABLE_BEFORE) or \
-           (next_match and next_match.group(1) in VALUABLE_AFTER):
+                (next_match and next_match.group(1) in VALUABLE_AFTER):
             return match.group()
         return ''
 
@@ -129,6 +126,7 @@ def clean_repeated_persian(tweet: str) -> str:
         if seq in PERSIAN_DOUBLE_EXCEPTIONS:
             return seq
         return m.group(1)
+
     return REPEATED_PERSIAN_PATTERN.sub(replacer, tweet)
 
 
@@ -136,8 +134,7 @@ def clean_repeated_persian(tweet: str) -> str:
 # تابع اصلی
 # ──────────────────────────────────────────────
 
-def is_sen(tweet: list[str], valid_hashtags: set[str]) -> tuple[bool, str]:
-    tweet = ''.join(tweet)
+def is_sen(tweet: str, valid_hashtags: set[str]) -> tuple[bool, str]:
     tweet = clean_url(tweet)
     tweet = clean_hashtag_by_freq(tweet, valid_hashtags)
     tweet = clean_number(tweet)
@@ -146,9 +143,15 @@ def is_sen(tweet: list[str], valid_hashtags: set[str]) -> tuple[bool, str]:
     tweet = normalizer.normalize(tweet)
     tweet = clean_repeated_persian(tweet)
 
+    # توکنایز کردن متن
     tokens = word_tokenizer.tokenize(tweet)
-    tags   = tagger.tag(tokens)
 
-    has_verb = (any(tag == 'VERB' for _, tag in tags) and len(tokens) >= 3)
+    # بهینه‌سازی پرفورمنس: جلوگیری از تگ‌گذاری روی جملات بسیار کوتاه و خالی
+    if len(tokens) < 3:
+        return False, tweet
+
+    # اجرای عملیات سنگین POS Tagging فقط روی جملات معتبر
+    tags = tagger.tag(tokens)
+    has_verb = any(tag == 'VERB' for _, tag in tags)
 
     return has_verb, tweet

@@ -1,6 +1,6 @@
 import regex as re
 
-DATE_PATTERN    = re.compile(r'"?\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}"?,?')
+DATE_PATTERN = re.compile(r'"?\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}"?,?')
 NUMBERS_PATTERN = re.compile(r'(?:,\d+)+\s*$')
 
 
@@ -11,18 +11,20 @@ def parse_csv(path: str):
             if not line:
                 continue
 
-            line = DATE_PATTERN.sub('', line)      # حذف تاریخ از اول
-            line = NUMBERS_PATTERN.sub('', line)   # حذف همه اعداد از آخر یکجا
+            line = DATE_PATTERN.sub('', line)  # حذف تاریخ از اول
+            line = NUMBERS_PATTERN.sub('', line)  # حذف همه اعداد از آخر یکجا
             line = line.strip().strip(',')
 
             if line:
                 yield line
 
 
-def runer(data_path: str | None = None) -> None:
+def runner(data_path: str | None = None) -> None:
     if data_path is None:
-        data_path = input("لطفا نام دیتا خام را وارد کنید:\n")
-    print("در حال استخراج داده های خام")
+        data_path = input("لطفا نام دیتای خام را وارد کنید:\n")
+
+    print("⏳ در حال استخراج داده‌های خام...")
+
     with open('output files/extracted.csv', 'w', encoding='utf-8', errors='ignore') as out:
         for row in parse_csv(data_path):
             out.write(row + '\n')
