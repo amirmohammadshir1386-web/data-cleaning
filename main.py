@@ -1,4 +1,5 @@
 import os
+import re
 import pandas as pd
 from multiprocessing import Pool
 from functools import partial
@@ -8,6 +9,12 @@ from hazm import SentenceTokenizer
 import analyzer as ac
 
 sentence_tokenizer = SentenceTokenizer()
+
+# SentenceTokenizer هزم فقط روی نقطه/تعجب/سؤال می‌شکنه، نه ویرگول.
+# در نتیجه توییت‌هایی که لیستی از کلمات با ویرگول جدا شده‌ن (نه جمله‌ی واقعی)
+# به‌عنوان یک «جمله»‌ی خیلی بلند و بی‌معنا وارد فاز ۴ می‌شدن و چون معمولاً
+# جایی وسطشون یه فعل (درست یا اشتباه‌تگ‌خورده) پیدا می‌شد، رد می‌شدن.
+COMMA_SPLIT_PATTERN = re.compile(r'[،,]')
 
 # ── مسیرها ───────────────────────────────────────────────────────────────────
 OUTPUT_DIR = 'output files'
@@ -32,10 +39,17 @@ def log(message: str) -> None:
 
 
 def extract_sentences(tweets_iterator):
-    """جملات را با استفاده از Hazm توکنایز می‌کند."""
+    """
+    جملات را با استفاده از Hazm توکنایز می‌کند و سپس هر جمله را
+    روی ویرگول (، یا ,) هم می‌شکند تا لیست‌های کلمات ویرگول‌دار
+    به‌عنوان یک جمله‌ی واحد و بیش‌ازحد بلند وارد فاز پاکسازی نشوند.
+    """
     for tweet in tweets_iterator:
         for sent in sentence_tokenizer.tokenize(tweet):
-            yield sent
+            for piece in COMMA_SPLIT_PATTERN.split(sent):
+                piece = piece.strip()
+                if piece:
+                    yield piece
 
 
 def remove_duplicates(input_path: str, output_path: str) -> None:
