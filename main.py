@@ -5,6 +5,7 @@ from functools import partial
 import extractor as ex
 import cleaner as cl
 from hazm import SentenceTokenizer
+import analyzer as ac
 
 sentence_tokenizer = SentenceTokenizer()
 
@@ -13,9 +14,21 @@ OUTPUT_DIR = 'output files'
 EXTRACTED_PATH = f'{OUTPUT_DIR}/extracted.csv'
 UNIQUE_PATH = f'{OUTPUT_DIR}/unique.csv'
 FINAL_PATH = f'{OUTPUT_DIR}/final.csv'
+REPORT_PATH = 'analyzer.txt'
 
 # اطمینان از وجود پوشه خروجی
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+
+def log(message: str) -> None:
+    """
+    پیام را هم توی کنسول چاپ می‌کنه هم توی analyzer.txt ذخیره می‌کنه.
+    این تابع جای print(..., file=f) پراکنده رو می‌گیره تا دیگه جایی
+    فراموش نشه که file=f رو پاس بدیم.
+    """
+    print(message)
+    with open(REPORT_PATH, 'a', encoding='utf-8') as f:
+        print(message, file=f)
 
 
 def extract_sentences(tweets_iterator):
@@ -29,7 +42,7 @@ def remove_duplicates(input_path: str, output_path: str) -> None:
     print("⏳ فاز ۲: حذف تکراری‌ها...")
     df = pd.read_csv(input_path, names=['text'], header=None)
     df_unique = df.drop_duplicates(subset=['text'])
-    print(f"   کل: {len(df):,}  |  یکتا: {len(df_unique):,}")
+    log(f"   کل: {len(df):,}  |  یکتا: {len(df_unique):,}")
     df_unique.to_csv(output_path, index=False, header=False, encoding='utf-8')
 
 
@@ -44,18 +57,22 @@ def iter_lines(path: str):
 
 if __name__ == '__main__':
 
+    # ریست کردن فایل گزارش در ابتدای هر اجرا — تا گزارش‌های اجرای قبلی
+    # با اجرای جدید قاطی نشن
+    open(REPORT_PATH, 'w', encoding='utf-8').close()
+
     # ── فاز ۱: استخراج ───────────────────────────────────────────────────────
     ex.runner()
-    print("✅ فاز ۱: استخراج پایان یافت.")
+    log("✅ فاز ۱: استخراج پایان یافت.")
 
     # ── فاز ۲: حذف تکراری‌ها ─────────────────────────────────────────────────
     remove_duplicates(EXTRACTED_PATH, UNIQUE_PATH)
-    print("✅ فاز ۲: حذف تکراری‌ها پایان یافت.")
+    log("✅ فاز ۲: حذف تکراری‌ها پایان یافت.")
 
     # ── فاز ۳: شمارش هشتگ‌ها — پاس اول روی فایل ─────────────────────────────
     print("⏳ فاز ۳: شمارش هشتگ‌ها...")
     valid_hashtags = cl.count_hashtags(iter_lines(UNIQUE_PATH))
-    print(f"✅ فاز ۳: {len(valid_hashtags):,} هشتگ معتبر پیدا شد.")
+    log(f"✅ فاز ۳: {len(valid_hashtags):,} هشتگ معتبر پیدا شد.")
 
     # ── فاز ۴: پاکسازی موازی — پاس دوم روی فایل ─────────────────────────────
     print("⏳ فاز ۴: پاکسازی توییت‌ها...")
@@ -70,7 +87,9 @@ if __name__ == '__main__':
                     out.write(clean + '\n')
                     count += 1
 
-    print(f"✅ فاز ۴: {count:,} توییت معتبر → {FINAL_PATH}")
+    log(f"✅ فاز ۴: {count:,} توییت معتبر → {FINAL_PATH}")
 
-    # نکته برای گزارش: برای استخراج طول جملات (بخش تحلیل طول جملات در داکیومنت)
-    # می‌توانی بعد از پایان این فاز، فایل final.csv را باز کرده و طول را محاسبه کنی.
+    # ── فاز ۵: تحلیل طول جملات ───────────────────────────────────────────────
+    print("⏳ فاز ۵: تحلیل طول جملات...")
+    ac.analyzer()
+    log("✅ فاز ۵: تحلیل طول جملات پایان یافت.")
