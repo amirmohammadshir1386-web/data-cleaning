@@ -1,10 +1,31 @@
-import pandas as pd
 import sys
 
 # ── مسیرها ───────────────────────────────────────────────────────────────────
 OUTPUT_DIR = 'output files'
 FINAL_PATH = f'{OUTPUT_DIR}/final.csv'
 REPORT_PATH = 'analyzer.txt'
+CHUNK_SIZE = 10000
+
+
+def _iter_chunks(path: str, chunk_size: int):
+    """
+    final.csv را خط‌به‌خط و به‌صورت قطعه‌قطعه (chunk) می‌خواند —
+    نه با pd.read_csv، چون final.csv یک CSV واقعی نیست (صرفاً یک جمله
+    در هر خط) و اگر خودِ متن یک جمله هم کاما داشته باشد، pd.read_csv
+    آن را delimiter در نظر می‌گیرد و خطای پارس می‌دهد.
+    """
+    chunk = []
+    with open(path, encoding='utf-8', errors='ignore') as f:
+        for line in f:
+            line = line.rstrip('\n')
+            if not line:
+                continue
+            chunk.append(line)
+            if len(chunk) >= chunk_size:
+                yield chunk
+                chunk = []
+    if chunk:
+        yield chunk
 
 
 def analyzer():
@@ -22,20 +43,8 @@ def analyzer():
     min_sent = ''
     total_count = 0
 
-    for chunk in pd.read_csv(
-            FINAL_PATH,
-            chunksize=10000,
-            names=['text'],
-            header=None,
-            encoding='utf-8',
-    ):
-        for row in chunk.itertuples():
-            sentence = row.text
-
-            # ردیف‌های خالی/NaN را نادیده می‌گیریم
-            if not isinstance(sentence, str):
-                continue
-
+    for chunk in _iter_chunks(FINAL_PATH, CHUNK_SIZE):
+        for sentence in chunk:
             length = len(sentence)
             total_count += 1
 
