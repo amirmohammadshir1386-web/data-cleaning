@@ -53,11 +53,27 @@ def extract_sentences(tweets_iterator):
 
 
 def remove_duplicates(input_path: str, output_path: str) -> None:
+    """
+    extracted.csv یک فایل CSV واقعی نیست — صرفاً یک فایل متنیه که هر خطش
+    یک توییته و ممکنه خودِ متن هر خط شامل کاما (، یا ,) هم باشه. پس نباید
+    با pd.read_csv خوندش (چون کاما رو delimiter می‌بینه و اگه متن خودش
+    کاما داشته باشه، خطای «Expected 1 fields, saw 2» می‌ده). به‌جاش خط‌به‌خط
+    می‌خونیم، دقیقاً هم‌روش با iter_lines.
+    """
     print("⏳ فاز ۲: حذف تکراری‌ها...")
-    df = pd.read_csv(input_path, names=['text'], header=None)
+    with open(input_path, encoding='utf-8', errors='ignore') as f:
+        lines = [line.rstrip('\n') for line in f if line.strip()]
+
+    df = pd.DataFrame({'text': lines})
     df_unique = df.drop_duplicates(subset=['text'])
     log(f"   کل: {len(df):,}  |  یکتا: {len(df_unique):,}")
-    df_unique.to_csv(output_path, index=False, header=False, encoding='utf-8')
+
+    # اینجا هم به همون دلیل، از to_csv عادی استفاده نمی‌کنیم چون pandas
+    # به‌صورت خودکار متن‌های حاوی کاما رو quote می‌کنه و باز فایل خروجی
+    # واقعی CSV می‌شه؛ در عوض مستقیم خط‌به‌خط می‌نویسیم.
+    with open(output_path, 'w', encoding='utf-8') as out:
+        for text in df_unique['text']:
+            out.write(text + '\n')
 
 
 def iter_lines(path: str):
