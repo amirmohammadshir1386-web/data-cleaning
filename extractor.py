@@ -1,22 +1,46 @@
+import csv
 import regex as re
 
 DATE_PATTERN = re.compile(r'"?\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}"?,?')
-NUMBERS_PATTERN = re.compile(r'(?:,\d+)+\s*$')
+NUMERIC_FIELD_PATTERN = re.compile(r'^-?[\d۰-۹]+(?:[.,][\d۰-۹]+)?$')
 
 
 def parse_csv(path: str):
-    with open(path, 'r', encoding='utf-8', errors='ignore') as f:
-        for line in f:
-            line = line.strip()
-            if not line:
+    """
+    فایل CSV خام را با ماژول استاندارد csv می‌خواند، نه خط‌به‌خط ساده.
+
+    دلیل: بعضی رکوردها متن‌شون داخل quote یه newline واقعی دارن (یعنی یک
+    توییت می‌تونه چند خط فیزیکی رو اشغال کنه). خواندن ساده‌ی `for line in f`
+    این‌جور رکوردها رو از وسط می‌شکنه و کل فایل رو خراب می‌کنه. csv.reader
+    این حالت رو استاندارد و درست مدیریت می‌کنه.
+    """
+    with open(path, 'r', encoding='utf-8', errors='ignore', newline='') as f:
+        reader = csv.reader(f)
+
+        for i, row in enumerate(reader):
+            if not row:
                 continue
 
-            line = DATE_PATTERN.sub('', line)  # حذف تاریخ از اول
-            line = NUMBERS_PATTERN.sub('', line)  # حذف همه اعداد از آخر یکجا
-            line = line.strip().strip(',')
+            # ردیف هدر رو رد کن (فقط اگه واقعاً ردیف اوله و اسم ستون اوله «text»ه)
+            if i == 0 and row[0].strip().lower() == 'text':
+                continue
 
-            if line:
-                yield line
+            # حذف ستون‌های عددی انتهایی (امتیاز احساسات، لایک، ریتوییت و ...)
+            # به هر تعدادی که باشن — رویکرد column-agnostic، مثل قبل
+            while row and NUMERIC_FIELD_PATTERN.fullmatch(row[-1].strip()):
+                row.pop()
+
+            if not row:
+                continue
+
+            # اگه بعد از حذف ستون‌های عددی هنوز چند فیلد مونده (مثلاً تاریخ + متن)،
+            # با کاما به هم می‌چسبونیمشون تا همون منطق قبلی DATE_PATTERN روش کار کنه
+            text = ','.join(row).strip()
+            text = DATE_PATTERN.sub('', text)  # حذف تاریخ از اول (اگه بود)
+            text = text.strip().strip(',').strip()
+
+            if text:
+                yield text
 
 
 def runner(data_path: str | None = None) -> None:
