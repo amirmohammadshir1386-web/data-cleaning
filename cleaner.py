@@ -45,7 +45,6 @@ NOISE_NUMBER_PATTERN = re.compile(r'\b[\d۰-۹]{7,}\b')
 NUMBER_PATTERN = re.compile(r'[\d۰-۹]+')
 PREV_WORD_PATTERN = re.compile(r'([\p{L}]+)\s*$')
 NEXT_WORD_PATTERN = re.compile(r'\s*([\p{L}%٪]+)')
-EMOJI_PATTERN = re.compile(r'\p{Emoji}')
 
 # ──────────────────────────────────────────────
 # اعداد معنادار
@@ -116,10 +115,6 @@ def clean_all_without_persian(tweet: str) -> str:
     return NON_PERSIAN_PATTERN.sub('', tweet)
 
 
-def clean_emojis(tweet: str) -> str:
-    return EMOJI_PATTERN.sub('', tweet)
-
-
 def clean_repeated_persian(tweet: str) -> str:
     def replacer(m: re.Match) -> str:
         seq = m.group()
@@ -138,7 +133,6 @@ def is_sen(tweet: str, valid_hashtags: set[str]) -> tuple[bool, str]:
     tweet = clean_url(tweet)
     tweet = clean_hashtag_by_freq(tweet, valid_hashtags)
     tweet = clean_number(tweet)
-    tweet = clean_emojis(tweet)
     tweet = clean_all_without_persian(tweet)
     tweet = normalizer.normalize(tweet)
     tweet = clean_repeated_persian(tweet)
