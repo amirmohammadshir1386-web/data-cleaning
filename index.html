@@ -1287,7 +1287,7 @@ ok
 
         const topWordsTbody = document.getElementById("topWordsTbody");
         if (sortedWords.length === 0) {
-            topWordsTbody.innerHTML = "<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">هنوز متنی پالایش نشده است.</td></tr>";
+            topWordsTbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">هنوز متنی پالایش نشده است.</td></tr>';
         } else {
             topWordsTbody.innerHTML = sortedWords.map(([w, cnt], idx) => {
                 const pct = s.cleanWords > 0 ? ((cnt / s.cleanWords) * 100).toFixed(1) : 0;
@@ -1306,7 +1306,7 @@ ok
 
         const topCharsTbody = document.getElementById("topCharsTbody");
         if (sortedChars.length === 0) {
-            topCharsTbody.innerHTML = "<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">هنوز متنی پالایش نشده است.</td></tr>";
+            topCharsTbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">هنوز متنی پالایش نشده است.</td></tr>';
         } else {
             topCharsTbody.innerHTML = sortedChars.map(([ch, cnt]) => {
                 const pct = s.cleanChars > 0 ? ((cnt / s.cleanChars) * 100).toFixed(1) : 0;
@@ -1339,7 +1339,7 @@ ok
         }
         let csvContent = "\uFEFF\"id\",\"cleaned_text\"\n";
         state.cleanedLines.forEach((line, idx) => {
-            const escaped = line.replace(/"/g, """");
+            const escaped = line.replace(/"/g, "\"\"");
             csvContent += `${idx + 1},"${escaped}"\n`;
         });
         downloadFile(csvContent, "final.csv", "text/csv;charset=utf-8;");
