@@ -718,6 +718,22 @@
                                 <button class="tool-btn" id="btnClearInput">پاک کردن</button>
                             </div>
                         </div>
+                        <div id="csvToolbar" style="display: none; background: var(--bg-body); padding: 0.6rem 1rem; border-bottom: 1px solid var(--border); font-size: 0.85rem; flex-wrap: wrap; gap: 1rem; align-items: center;">
+                            <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer;">
+                                <input type="checkbox" id="csvHasHeader" checked>
+                                <span>سطر اول سرستون است</span>
+                            </label>
+                            <div style="display: flex; align-items: center; gap: 0.4rem;">
+                                <span>ستون متن:</span>
+                                <select id="csvTextCol" style="padding: 0.25rem 0.5rem; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-main); font-size: 0.82rem;"></select>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 0.4rem;">
+                                <span>ستون شناسه:</span>
+                                <select id="csvIdCol" style="padding: 0.25rem 0.5rem; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-main); font-size: 0.82rem;">
+                                    <option value="auto">شناسه ندارد؛ شماره‌گذاری خودکار</option>
+                                </select>
+                            </div>
+                        </div>
                         <textarea id="rawInput" placeholder="متن خام یا نویزی را وارد کنید یا روی «نمونه تستی» کلیک کنید..."></textarea>
                         <div class="box-footer">
                             <span id="rawStats">سطرها: ۰ | کلمات: ۰ | کاراکترها: ۰</span>
@@ -919,11 +935,15 @@
 
 <div class="toast" id="toast">پیام سیستم</div>
 
+<script src="csv_utils.js"></script>
 <script>
     const state = {
         theme: "light",
         rawText: "",
         cleanedText: "",
+        isCsvMode: false,
+        csvRawText: "",
+        cleanedRecords: [],
         rawLines: [],
         cleanedLines: [],
         stats: {
@@ -1002,17 +1022,59 @@ ok
         setTimeout(() => toast.classList.remove("show"), 2500);
     }
 
+    function clearOutputState() {
+        state.cleanedLines = [];
+        state.cleanedText = "";
+        state.cleanedRecords = [];
+        cleanOutput.value = "";
+        document.getElementById("cleanStats").textContent = "سطرها: ۰ | کلمات: ۰ | کاراکترها: ۰";
+        document.getElementById("reductionRate").textContent = "کاهش حجم: ۰٪";
+        document.getElementById("valCleanLines").textContent = "۰";
+        document.getElementById("valDupRemoved").textContent = "۰";
+        document.getElementById("valVocabCount").textContent = "۰";
+
+        state.stats.cleanChars = 0;
+        state.stats.cleanWords = 0;
+        state.stats.cleanLines = 0;
+        state.stats.duplicatesRemoved = 0;
+        state.stats.uniqueWords = 0;
+        state.stats.avgSentenceLength = 0;
+        state.stats.avgWordLength = 0;
+        state.stats.hashtags = {};
+        state.stats.wordFrequencies = {};
+        state.stats.charFrequencies = {};
+        updateAnalyzerTab();
+    }
+
+    function resetCsvMode() {
+        state.isCsvMode = false;
+        state.csvRawText = "";
+        state.cleanedRecords = [];
+        const csvToolbar = document.getElementById("csvToolbar");
+        if (csvToolbar) csvToolbar.style.display = "none";
+        const csvTextCol = document.getElementById("csvTextCol");
+        if (csvTextCol) csvTextCol.replaceChildren();
+        const csvIdCol = document.getElementById("csvIdCol");
+        if (csvIdCol) csvIdCol.replaceChildren();
+        const csvHasHeader = document.getElementById("csvHasHeader");
+        if (csvHasHeader) csvHasHeader.checked = true;
+    }
+
     btnLoadSample.addEventListener("click", () => {
+        resetCsvMode();
+        clearOutputState();
         rawInput.value = SAMPLE_DIRTY_TEXT;
         handleRawInputChange();
-        showToast("متن نمونه بارگذاری شد");
+        runPipeline();
+        showToast("متن نمونه بارگذاری و پردازش شد");
     });
 
     btnClearInput.addEventListener("click", () => {
         rawInput.value = "";
-        cleanOutput.value = "";
+        resetCsvMode();
+        clearOutputState();
         handleRawInputChange();
-        showToast("محیط متنی پاک شد");
+        showToast("محیط متنی و خروجی‌ها پاک شدند");
     });
 
     btnCopyOutput.addEventListener("click", () => {
@@ -1031,7 +1093,70 @@ ok
 
         const reader = new FileReader();
         reader.onload = (event) => {
-            rawInput.value = event.target.result;
+            clearOutputState();
+            const fileContent = event.target.result;
+            const csvToolbar = document.getElementById("csvToolbar");
+            const csvTextCol = document.getElementById("csvTextCol");
+            const csvIdCol = document.getElementById("csvIdCol");
+            const csvHasHeader = document.getElementById("csvHasHeader");
+
+            if (file.name.toLowerCase().endsWith(".csv")) {
+                try {
+                    const parsed = parseCSV(fileContent);
+                    const det = detectCSVColumns(parsed);
+
+                    csvToolbar.style.display = "flex";
+                    state.isCsvMode = true;
+                    state.csvRawText = fileContent;
+                    csvHasHeader.checked = det.hasHeader;
+
+                    // Populate text column selector
+                    csvTextCol.replaceChildren();
+                    const defaultTextOpt = document.createElement("option");
+                    defaultTextOpt.value = "";
+                    defaultTextOpt.textContent = "-- لطفاً ستون متن را انتخاب کنید --";
+                    csvTextCol.appendChild(defaultTextOpt);
+
+                    const cols = det.headers && det.headers.length > 0 ? det.headers : (parsed[0] || []);
+                    cols.forEach((colName, idx) => {
+                        const opt = document.createElement("option");
+                        opt.value = String(idx);
+                        opt.textContent = `ستون ${idx + 1}: ${colName || ("ستون " + (idx + 1))}`;
+                        if (idx === det.textColumnIndex) {
+                            opt.selected = true;
+                        }
+                        csvTextCol.appendChild(opt);
+                    });
+
+                    // Populate ID column selector (default is ALWAYS auto-numbering unless exact id column found)
+                    csvIdCol.replaceChildren();
+                    const autoIdOpt = document.createElement("option");
+                    autoIdOpt.value = "auto";
+                    autoIdOpt.textContent = "شناسه ندارد؛ شماره‌گذاری خودکار";
+                    csvIdCol.appendChild(autoIdOpt);
+
+                    cols.forEach((colName, idx) => {
+                        const opt = document.createElement("option");
+                        opt.value = String(idx);
+                        opt.textContent = `ستون ${idx + 1}: ${colName || ("ستون " + (idx + 1))}`;
+                        if (idx === det.idColumnIndex) {
+                            opt.selected = true;
+                        }
+                        csvIdCol.appendChild(opt);
+                    });
+
+                } catch (err) {
+                    clearOutputState();
+                    resetCsvMode();
+                    showToast(err.message);
+                    e.target.value = "";
+                    return;
+                }
+            } else {
+                resetCsvMode();
+            }
+
+            rawInput.value = fileContent;
             handleRawInputChange();
             showToast(`فایل ${file.name} بارگذاری شد`);
         };
@@ -1053,7 +1178,77 @@ ok
         document.getElementById("valRawLines").textContent = lines.length.toLocaleString("fa-IR");
     }
 
-    rawInput.addEventListener("input", handleRawInputChange);
+    function syncCsvStateFromInput() {
+        if (!state.isCsvMode) return;
+        const currentText = rawInput.value.trim();
+        if (!currentText) {
+            state.isCsvMode = false;
+            document.getElementById("csvToolbar").style.display = "none";
+            return;
+        }
+        try {
+            const parsed = parseCSV(currentText);
+            const det = detectCSVColumns(parsed);
+            state.csvRawText = currentText;
+
+            // Re-sync column dropdowns if column count changed or empty
+            const csvTextCol = document.getElementById("csvTextCol");
+            const csvIdCol = document.getElementById("csvIdCol");
+            const previousTextVal = csvTextCol.value;
+            const previousIdVal = csvIdCol.value;
+
+            const cols = det.headers && det.headers.length > 0 ? det.headers : (parsed[0] || []);
+            if (cols.length > 0) {
+                csvTextCol.replaceChildren();
+                const defaultTextOpt = document.createElement("option");
+                defaultTextOpt.value = "";
+                defaultTextOpt.textContent = "-- لطفاً ستون متن را انتخاب کنید --";
+                csvTextCol.appendChild(defaultTextOpt);
+
+                cols.forEach((colName, idx) => {
+                    const opt = document.createElement("option");
+                    opt.value = String(idx);
+                    opt.textContent = `ستون ${idx + 1}: ${colName || ("ستون " + (idx + 1))}`;
+                    if (String(idx) === previousTextVal || (previousTextVal === "" && idx === det.textColumnIndex)) {
+                        opt.selected = true;
+                    }
+                    csvTextCol.appendChild(opt);
+                });
+
+                csvIdCol.replaceChildren();
+                const autoIdOpt = document.createElement("option");
+                autoIdOpt.value = "auto";
+                autoIdOpt.textContent = "شناسه ندارد؛ شماره‌گذاری خودکار";
+                
+                // Strictly preserve user selection using the shared syncCsvIdSelection helper
+                const targetIdVal = (typeof syncCsvIdSelection === "function")
+                    ? syncCsvIdSelection(previousIdVal, cols.length)
+                    : ((previousIdVal === "auto" || !previousIdVal) ? "auto" : previousIdVal);
+                if (targetIdVal === "auto") {
+                    autoIdOpt.selected = true;
+                }
+                csvIdCol.appendChild(autoIdOpt);
+
+                cols.forEach((colName, idx) => {
+                    const opt = document.createElement("option");
+                    opt.value = String(idx);
+                    opt.textContent = `ستون ${idx + 1}: ${colName || ("ستون " + (idx + 1))}`;
+                    if (String(idx) === targetIdVal) {
+                        opt.selected = true;
+                    }
+                    csvIdCol.appendChild(opt);
+                });
+            }
+        } catch (e) {
+            // User might be in the middle of typing an unclosed quote, ignore until pipeline runs
+        }
+    }
+
+    rawInput.addEventListener("input", () => {
+        handleRawInputChange();
+        clearOutputState();
+        syncCsvStateFromInput();
+    });
 
     function normalizePersianChars(text) {
         return text
@@ -1139,6 +1334,7 @@ ok
     function runPipeline() {
         const text = rawInput.value;
         if (!text.trim()) {
+            clearOutputState();
             showToast("لطفاً ابتدا متنی برای پردازش وارد کنید");
             return;
         }
@@ -1157,6 +1353,55 @@ ok
         const optCleanHashtags = document.getElementById("optCleanHashtags").checked;
         const optFilterShort = document.getElementById("optFilterShort").checked;
         const optValidateSen = document.getElementById("optValidateSen").checked;
+
+        if (state.isCsvMode) {
+            const csvTextCol = document.getElementById("csvTextCol");
+            if (!csvTextCol.value) {
+                clearOutputState();
+                showToast("خطا: لطفاً ستون متن را از نوار بالای ورودی انتخاب کنید");
+                return;
+            }
+
+            try {
+                // Always read live text from rawInput.value so user edits are respected
+                const liveCsvText = rawInput.value;
+                const res = processCSV(liveCsvText, {
+                    hasHeader: document.getElementById("csvHasHeader").checked,
+                    textColumn: Number(csvTextCol.value),
+                    idColumn: document.getElementById("csvIdCol").value === "auto" ? "auto" : Number(document.getElementById("csvIdCol").value),
+                    preserveCellNewlines: true,
+                    filterShort: optFilterShort,
+                    validateSentence: optValidateSen,
+                    deduplicate: optDeduplicate,
+                    cleanOptions: {
+                        normalizeChars: optNormalizeChars,
+                        semiSpace: optSemiSpace,
+                        persianDigits: optPersianDigits,
+                        removeDiacritics: optRemoveDiacritics,
+                        removeUrls: optRemoveUrls,
+                        removeEmails: optRemoveEmails,
+                        removeMentions: optRemoveMentions,
+                        removeHtml: optRemoveHtml,
+                        removeEmojis: optRemoveEmojis,
+                        cleanPunctuation: optCleanPunctuation,
+                        cleanHashtags: optCleanHashtags
+                    }
+                });
+
+                state.cleanedRecords = res.rows;
+                state.cleanedLines = res.rows.map(r => r[1]);
+                state.cleanedText = res.rows.map(r => r[1]).join("\n");
+                cleanOutput.value = res.rows.map(r => `[${r[0]}] ${r[1]}`).join("\n\n");
+
+                computeAnalytics(text, state.cleanedText, res.stats.totalRecords, res.stats.validRecords, res.stats.duplicatesRemoved, {});
+                showToast("خط لوله CSV با موفقیت اجرا شد");
+                return;
+            } catch (err) {
+                clearOutputState();
+                showToast(err.message);
+                return;
+            }
+        }
 
         let lines = text.split("\n");
         let processedLines = [];
@@ -1286,18 +1531,40 @@ ok
             .slice(0, 15);
 
         const topWordsTbody = document.getElementById("topWordsTbody");
+        topWordsTbody.replaceChildren();
         if (sortedWords.length === 0) {
-            topWordsTbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">هنوز متنی پالایش نشده است.</td></tr>';
+            const tr = document.createElement("tr");
+            const td = document.createElement("td");
+            td.colSpan = 4;
+            td.style.textAlign = "center";
+            td.style.color = "var(--text-muted)";
+            td.textContent = "هنوز متنی پالایش نشده است.";
+            tr.appendChild(td);
+            topWordsTbody.appendChild(tr);
         } else {
-            topWordsTbody.innerHTML = sortedWords.map(([w, cnt], idx) => {
-                const pct = s.cleanWords > 0 ? ((cnt / s.cleanWords) * 100).toFixed(1) : 0;
-                return `<tr>
-                    <td>${(idx + 1).toLocaleString("fa-IR")}</td>
-                    <td style="font-weight: 600;">${w}</td>
-                    <td>${cnt.toLocaleString("fa-IR")}</td>
-                    <td>${Number(pct).toLocaleString("fa-IR")}٪</td>
-                </tr>`;
-            }).join("");
+            sortedWords.forEach(([w, cnt], idx) => {
+                const pct = s.cleanWords > 0 ? ((cnt / s.cleanWords) * 100).toFixed(1) : "0";
+                const tr = document.createElement("tr");
+
+                const tdIdx = document.createElement("td");
+                tdIdx.textContent = (idx + 1).toLocaleString("fa-IR");
+
+                const tdWord = document.createElement("td");
+                tdWord.style.fontWeight = "600";
+                tdWord.textContent = w;
+
+                const tdCnt = document.createElement("td");
+                tdCnt.textContent = cnt.toLocaleString("fa-IR");
+
+                const tdPct = document.createElement("td");
+                tdPct.textContent = `${Number(pct).toLocaleString("fa-IR")}٪`;
+
+                tr.appendChild(tdIdx);
+                tr.appendChild(tdWord);
+                tr.appendChild(tdCnt);
+                tr.appendChild(tdPct);
+                topWordsTbody.appendChild(tr);
+            });
         }
 
         const sortedChars = Object.entries(s.charFrequencies || {})
@@ -1305,18 +1572,38 @@ ok
             .slice(0, 15);
 
         const topCharsTbody = document.getElementById("topCharsTbody");
+        topCharsTbody.replaceChildren();
         if (sortedChars.length === 0) {
-            topCharsTbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">هنوز متنی پالایش نشده است.</td></tr>';
+            const tr = document.createElement("tr");
+            const td = document.createElement("td");
+            td.colSpan = 3;
+            td.style.textAlign = "center";
+            td.style.color = "var(--text-muted)";
+            td.textContent = "هنوز متنی پالایش نشده است.";
+            tr.appendChild(td);
+            topCharsTbody.appendChild(tr);
         } else {
-            topCharsTbody.innerHTML = sortedChars.map(([ch, cnt]) => {
-                const pct = s.cleanChars > 0 ? ((cnt / s.cleanChars) * 100).toFixed(1) : 0;
+            sortedChars.forEach(([ch, cnt]) => {
+                const pct = s.cleanChars > 0 ? ((cnt / s.cleanChars) * 100).toFixed(1) : "0";
                 const label = ch === "\u200c" ? "نیم‌فاصله (ZWNJ)" : ch;
-                return `<tr>
-                    <td style="font-family: monospace; font-size: 1.05rem;">${label}</td>
-                    <td>${cnt.toLocaleString("fa-IR")}</td>
-                    <td>${Number(pct).toLocaleString("fa-IR")}٪</td>
-                </tr>`;
-            }).join("");
+                const tr = document.createElement("tr");
+
+                const tdChar = document.createElement("td");
+                tdChar.style.fontFamily = "monospace";
+                tdChar.style.fontSize = "1.05rem";
+                tdChar.textContent = label;
+
+                const tdCnt = document.createElement("td");
+                tdCnt.textContent = cnt.toLocaleString("fa-IR");
+
+                const tdPct = document.createElement("td");
+                tdPct.textContent = `${Number(pct).toLocaleString("fa-IR")}٪`;
+
+                tr.appendChild(tdChar);
+                tr.appendChild(tdCnt);
+                tr.appendChild(tdPct);
+                topCharsTbody.appendChild(tr);
+            });
         }
     }
 
@@ -1333,15 +1620,19 @@ ok
     }
 
     document.getElementById("btnExportCsv").addEventListener("click", () => {
-        if (!state.cleanedLines.length) {
+        if (!state.cleanedLines.length && !state.cleanedRecords.length) {
             showToast("ابتدا عملیات پاک‌سازی را اجرا کنید");
             return;
         }
-        let csvContent = "\uFEFF\"id\",\"cleaned_text\"\n";
-        state.cleanedLines.forEach((line, idx) => {
-            const escaped = line.replace(/"/g, "\"\"");
-            csvContent += `${idx + 1},"${escaped}"\n`;
-        });
+        let rows = [["id", "cleaned_text"]];
+        if (state.isCsvMode && state.cleanedRecords.length > 0) {
+            rows = rows.concat(state.cleanedRecords);
+        } else {
+            state.cleanedLines.forEach((line, idx) => {
+                rows.push([idx + 1, line]);
+            });
+        }
+        const csvContent = serializeCSV(rows);
         downloadFile(csvContent, "final.csv", "text/csv;charset=utf-8;");
         showToast("فایل final.csv دانلود شد");
     });
@@ -1356,6 +1647,10 @@ ok
     });
 
     document.getElementById("btnExportReport").addEventListener("click", () => {
+        if (!state.cleanedLines.length && !state.cleanedRecords.length) {
+            showToast("هیچ دادهٔ پالایش‌شده‌ای برای گزارش وجود ندارد؛ ابتدا خط لوله را با ورودی معتبر اجرا کنید");
+            return;
+        }
         const s = state.stats;
         const report = `=====================================================
 گزارش تحلیلی و آماری داده‌های متنی (Corpus Analyzer Report)
@@ -1386,6 +1681,24 @@ ${Object.entries(s.wordFrequencies || {})
 
         downloadFile(report, "analyzer.txt", "text/plain;charset=utf-8;");
         showToast("فایل گزارش analyzer.txt دانلود شد");
+    });
+
+    // Clear output state immediately whenever any configuration or column option changes
+    const configOptionIds = [
+        "csvHasHeader", "csvTextCol", "csvIdCol",
+        "optNormalizeChars", "optSemiSpace", "optPersianDigits", "optRemoveDiacritics",
+        "optRemoveUrls", "optRemoveEmails", "optRemoveMentions", "optRemoveHtml",
+        "optRemoveEmojis", "optCleanPunctuation", "optDeduplicate", "optCleanHashtags",
+        "optFilterShort", "optValidateSen"
+    ];
+
+    configOptionIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener("change", () => {
+                clearOutputState();
+            });
+        }
     });
 
     // Run automatically on load
