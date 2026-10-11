@@ -37,7 +37,7 @@ NON_PERSIAN_PATTERN = re.compile(r'[^\u0600-\u06FF\s#_۰-۹\d]')
 REPEATED_PERSIAN_PATTERN = re.compile(r'([ا-ی])\1+')
 
 # ──────────────────────────────────────────────
-# استثناهای تکرار فارسی
+# Exceptions to Persian Reduplication
 # ──────────────────────────────────────────────
 PERSIAN_DOUBLE_EXCEPTIONS = frozenset({'شش', 'کک'})
 WHITESPACE_PATTERN = re.compile(r'\s+')
@@ -47,7 +47,7 @@ PREV_WORD_PATTERN = re.compile(r'([\p{L}]+)\s*$')
 NEXT_WORD_PATTERN = re.compile(r'\s*([\p{L}%٪]+)')
 
 # ──────────────────────────────────────────────
-# اعداد معنادار
+# Significant figures
 # ──────────────────────────────────────────────
 VALUABLE_BEFORE = frozenset({
     'سال', 'ماه', 'روز', 'ماده', 'بند', 'صفحه', 'شماره',
@@ -62,11 +62,9 @@ VALUABLE_AFTER = frozenset({
     'دلار', 'یورو',
 })
 
-
 # ──────────────────────────────────────────────
-# توابع پاکسازی کمکی
+# Auxiliary cleanup functions
 # ──────────────────────────────────────────────
-
 def count_hashtags(tweets_iterator) -> set[str]:
     hashtag_counter = Counter()
     for tweet in tweets_iterator:
@@ -126,9 +124,8 @@ def clean_repeated_persian(tweet: str) -> str:
 
 
 # ──────────────────────────────────────────────
-# تابع اصلی
+# Main function
 # ──────────────────────────────────────────────
-
 def is_sen(tweet: str, valid_hashtags: set[str]) -> tuple[bool, str]:
     tweet = clean_url(tweet)
     tweet = clean_hashtag_by_freq(tweet, valid_hashtags)
@@ -137,14 +134,11 @@ def is_sen(tweet: str, valid_hashtags: set[str]) -> tuple[bool, str]:
     tweet = normalizer.normalize(tweet)
     tweet = clean_repeated_persian(tweet)
 
-    # توکنایز کردن متن
     tokens = word_tokenizer.tokenize(tweet)
 
-    # بهینه‌سازی پرفورمنس: جلوگیری از تگ‌گذاری روی جملات بسیار کوتاه و خالی
     if len(tokens) < 3:
         return False, tweet
 
-    # اجرای عملیات سنگین POS Tagging فقط روی جملات معتبر
     tags = tagger.tag(tokens)
     has_verb = any(tag == 'VERB' for _, tag in tags)
 
